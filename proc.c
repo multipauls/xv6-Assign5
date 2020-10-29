@@ -113,6 +113,10 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+  p->ctime = ticks; 
+  p->rtime = 0;
+  p->wtime=0;
+  p->etime=0;
   return p;
 }
 
@@ -264,6 +268,7 @@ exit(void)
 
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
+  curproc->etime = ticks;
   sched();
   panic("zombie exit");
 }
@@ -620,21 +625,20 @@ cps(void)
   struct proc *p;
 
   acquire(&ptable.lock);
-  cprintf("PID \t priority \t state\n");
+  cprintf("PID \t priority \tstate\t r_time \t w_time \n");
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == SLEEPING)
-      cprintf("%d \t %d \t sleeping\n", p->pid, p->priority);
+      cprintf("%d \t %d \t sleeping\t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime);
     else if(p->state == RUNNING)
-      cprintf("%d \t %d \t running\n", p->pid, p->priority);
+      cprintf("%d \t %d \trunning\t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime);
     else if (p->state == RUNNABLE)
-      cprintf("%d \t %d \t runnable\n", p->pid, p->priority); 
+      cprintf("%d \t %d \trunnable\t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime);
     else if (p->state == ZOMBIE)
-      cprintf("%d \t %d \t zombie\n", p->pid, p->priority);
+      cprintf("%d \t %d \tzombie\t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime);
     else if (p->state == RUNNABLE)
-      cprintf("%d \t %d \t runnable\n", p->pid, p->priority);
+      cprintf("%d \t %d \trunnable\t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime);
     else if (p->state == EMBRYO)
-      cprintf("%d \t %d \t embryo\n", p->pid, p->priority);
-  	//else 
+      cprintf("%d \t %d \tembryo\t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime);
   	//	return 0;
   }
   release(&ptable.lock);
