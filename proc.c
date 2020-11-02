@@ -89,6 +89,7 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
   p->priority = 60;
+  p->n_run=0;
 
   release(&ptable.lock);
 
@@ -369,118 +370,82 @@ waitx(int *wtime,int *rtime)
 //  - swtch to start running that process
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
-void
+
+
+
+
+void 
 scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
-  c->proc = 0;
   
-  for(;;){
-    // Enable interrupts on this processor.
+  c->proc = 0;
+  for (;;){
     sti();
-
+    // Enable interrupts on this processor.
+      
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      #ifdef DEFAULT
       if(p->state != RUNNABLE)
         continue;
-
+      #else
+      #ifdef PBS
+      struct proc *max, *p1;
+      max=p;
+      if(p->state != RUNNABLE)
+          continue;
+        for(p1 = ptable.proc; p1 < &ptable.proc[NPROC]; p1++){
+          if(p1->state != RUNNABLE)
+            continue;
+          if(max->priority > p1->priority)   
+            max = p1;
+        }
+      #else
+      #ifdef FCFS
+      struct proc *min=0;
+      min->pid=10000;
+      if(p->state != RUNNABLE)
+        continue;
+      if(p->pid > 1)
+      {
+          if (min !=0){
+            if(p->ctime < min->ctime)
+              min = p;
+          }
+          else
+              min = p;
+      }
+      
+      if(min != 0 && min->state == RUNNABLE)
+        p = min;
+      #endif
+      #endif
+      #endif
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
+      if (p!=0){
+        c->proc = p;
+        switchuvm(p);
+        p->n_run+=1;
+        p->state = RUNNING;
 
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
+        swtch(&(c->scheduler), p->context);
+        switchkvm();
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+      }
     }
+
     release(&ptable.lock);
 
   }
 }
-
-void 
-priScheduler(void)
-{
-  struct proc *p, *p1;
-  struct cpu *c = mycpu();
-  c->proc = 0; 
-  for(;;){
-    // Enable interrupts on this processor.
-    sti();
-    struct proc *highP;
-    highP->priority=100;
-    acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
-      for(p1 = ptable.proc; p1 < &ptable.proc[NPROC]; p1++){
-        if(p1->state != RUNNABLE)
-          continue;
-        if(highP->priority > p1->priority)   //larger value, lower priority
-          highP = p1;
-      }
-      
-      p = highP;
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
-    }
-  release(&ptable.lock);
-  }
-}
-
-void 
-FCScheduler(void)
-{
-  
-  struct proc *p;
-  struct cpu *c = mycpu();
-  c->proc = 0; 
-  for(;;){
-    sti();
-    acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      struct proc *minP;
-      minP->pid=10000;
-      if(p->state != RUNNABLE)
-        continue;
-      if(p->pid<minP->pid && p->pid>1){
-        minP=p;
-      }
-      
-      if(minP != 0 && minP->state == RUNNABLE)
-        p = minP;
-
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
-    }
-    release(&ptable.lock);      
-  }
-}
-
-
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
@@ -669,21 +634,18 @@ cps(void)
   struct proc *p;
 
   acquire(&ptable.lock);
-  cprintf("PID \t priority \tstate\t r_time \t w_time \n");
+  cprintf("PID \t priority \tstate\t \tr_time \t w_time  n_run\n");
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
     if(p->state == SLEEPING)
-      cprintf("%d \t %d \t sleeping\t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime);
+      cprintf("%d \t %d \t\tsleeping\t %d \t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime, p->n_run);
     else if(p->state == RUNNING)
-      cprintf("%d \t %d \trunning\t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime);
+      cprintf("%d \t %d \t\trunning\t \t %d \t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime,p->n_run);
     else if (p->state == RUNNABLE)
-      cprintf("%d \t %d \trunnable\t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime);
+      cprintf("%d \t %d \t\trunnable\t %d \t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime,p->n_run);
     else if (p->state == ZOMBIE)
-      cprintf("%d \t %d \tzombie\t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime);
-    else if (p->state == RUNNABLE)
-      cprintf("%d \t %d \trunnable\t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime);
+      cprintf("%d \t %d \t\tzombie\t %d \t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime,p->n_run);
     else if (p->state == EMBRYO)
-      cprintf("%d \t %d \tembryo\t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime);
-  	//	return 0;
+      cprintf("%d \t %d \t\tembryo\t %d \t %d \t %d\n", p->pid, p->priority, p->rtime, p->wtime,p->n_run);
   }
   release(&ptable.lock);
   return 0;

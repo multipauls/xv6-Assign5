@@ -46,6 +46,7 @@ struct proc {
   int etime;                   // Exit time (in ticks)
   int rtime;                   // Run time (in ticks)
   int wtime;                   // Wait time (in ticks)
+  int n_run;
   struct proc *parent;         // Parent process
   struct trapframe *tf;        // Trap frame for current syscall
   struct context *context;     // swtch() here to run process
